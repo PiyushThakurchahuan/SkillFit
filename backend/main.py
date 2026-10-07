@@ -10,7 +10,7 @@ from .resume import text
 from .hackathon_engine import insights as hackathon_insights, career_intelligence
 BASE=Path(__file__).resolve().parent.parent; FRONT=BASE/'frontend'; UP=BASE/'uploads'; UP.mkdir(exist_ok=True)
 init_db(); app=FastAPI(title='SkillFit'); app.mount('/static',StaticFiles(directory=FRONT),name='static')
-for route,file in {'/':'index.html','/passport':'passport.html','/resume':'resume.html','/dashboard':'dashboard.html','/jobs':'jobs.html','/gap':'gap.html','/assessment':'assessment.html','/reskill':'reskill.html','/whatif':'whatif.html'}.items():
+for route,file in {'/':'index.html','/passport':'passport.html','/resume':'resume.html','/dashboard':'dashboard.html','/jobs':'jobs.html','/gap':'gap.html','/assessment':'assessment.html','/reskill':'reskill.html','/whatif':'whatif.html','/hackathon':'hackathon.html'}.items():
     def make(f):
         return lambda: FileResponse(FRONT/f)
     app.get(route)(make(file))
