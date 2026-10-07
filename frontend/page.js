@@ -392,7 +392,8 @@ async function dashboard() {
                     </div>
                     <div>
                         <div class="kicker">Personality signal</div>
-                        <h3>Most informative traits</h3                        <div class="tags" style="margin-top:10px">
+                        <h3>Most informative traits</h3>
+                        <div class="tags" style="margin-top:10px">
                             \${hackathon.personality_success_signal.top_traits.slice(0,3).map((x,i) =>
                                 \`<span class="tag good">\${i+1}. \${prettyHackathon(x.feature)} · \${Math.round(x.importance*100)}%</span>\`
                             ).join('')}
