@@ -22,3 +22,12 @@ Then open:
     http://127.0.0.1:8000/docs
 
 Use GET /api/hackathon/insights to run the official-data analysis.
+
+
+## Phase 1: Data Audit + Cleaning
+
+From the SkillFit project root run:
+
+    python backend/analyze_hackathon.py
+
+This creates backend/hackathon_output/ containing cleaned CSVs and JSON summaries for the Approach Note. The generated output is intentionally local and should not be uploaded to the repository.
