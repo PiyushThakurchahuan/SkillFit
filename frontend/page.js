@@ -148,9 +148,26 @@ async function dashboard() {
         return;
     }
 
-    try {
-        const matches = await api(`/api/matches/${p.id}`);
-        const top = matches[0];
+  try {
+    const matches = await api(`/api/matches/${p.id}`);
+    const hackathon = await api('/api/hackathon/insights');
+    const top = matches[0];
+
+    const market = hackathon.analytics_jobs || {};
+    const marketTop = market.top_skills || [];
+
+    const candidateSkills = new Set(
+        (p.skills || []).map(x => String(x).trim().toLowerCase())
+    );
+
+    const matchedMarket = marketTop.filter(
+        x => candidateSkills.has(String(x.skill).trim().toLowerCase())
+    );
+
+    const marketCoverage = marketTop.length
+        ? Math.round((matchedMarket.length / marketTop.length) * 100)
+        : 0;
+
 
         /* Profile completeness is intentionally different from job-fit.
            It measures whether the living Career Passport is complete. */
@@ -355,6 +372,72 @@ async function dashboard() {
                 </div>
                 <a class="btn sm" href="/whatif">Explore what-if paths →</a>
             </div>
+            <div class="card" style="margin-top:15px;background:linear-gradient(135deg,#f0ecff,#fff1f7)">
+    <div class="split-head">
+        <div>
+            <div class="kicker">Official hackathon data</div>
+            <h2>SkillFit × Market Intelligence</h2>
+            <p class="muted">
+                Your current skills compared with the organizer's
+                Analytics Jobs dataset.
+            </p>
+        </div>
+
+        <div class="match-badge">
+            ${marketCoverage}%
+            <small>MARKET</small>
+        </div>
+    </div>
+
+    <div class="why-row" style="margin-top:15px">
+        <div>
+            <b>${market.rows ? market.rows.toLocaleString() : '—'}</b>
+            <span>analytics job records</span>
+        </div>
+
+        <div>
+            <b>${matchedMarket.length}</b>
+            <span>top skills matched</span>
+        </div>
+
+        <div>
+            <b>${marketTop.length}</b>
+            <span>top market signals</span>
+        </div>
+    </div>
+
+    <div style="margin-top:16px">
+        <div class="kicker">Your market-aligned skills</div>
+
+        <div class="tags" style="margin-top:10px">
+            ${
+                matchedMarket.length
+                    ? tags(matchedMarket.map(x => x.skill), 'good')
+                    : '<span class="muted">No exact top-skill overlap yet.</span>'
+            }
+        </div>
+    </div>
+
+    <div style="margin-top:16px">
+        <div class="kicker">Top market signals</div>
+
+        <div class="tags" style="margin-top:10px">
+            ${marketTop.slice(0, 8).map(x =>
+                `<span class="tag">${x.skill}</span>`
+            ).join('')}
+        </div>
+    </div>
+
+    <div style="margin-top:16px">
+        <p class="muted">
+            This is a market-alignment signal, not a probability of getting hired.
+        </p>
+
+        <a class="btn alt sm" href="/hackathon">
+            View hackathon evidence →
+        </a>
+    </div>
+</div>
         `;
     } catch (error) {
         console.error('Dashboard error:', error);
