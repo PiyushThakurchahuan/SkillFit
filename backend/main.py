@@ -7,6 +7,7 @@ from .database import init_db,conn
 from .models import Profile,Assessment
 from .engine import load,extract,match
 from .resume import text
+from .hackathon_engine import insights as hackathon_insights
 BASE=Path(__file__).resolve().parent.parent; FRONT=BASE/'frontend'; UP=BASE/'uploads'; UP.mkdir(exist_ok=True)
 init_db(); app=FastAPI(title='SkillFit'); app.mount('/static',StaticFiles(directory=FRONT),name='static')
 for route,file in {'/':'index.html','/passport':'passport.html','/resume':'resume.html','/dashboard':'dashboard.html','/jobs':'jobs.html','/gap':'gap.html','/assessment':'assessment.html','/reskill':'reskill.html','/whatif':'whatif.html'}.items():
@@ -15,6 +16,13 @@ for route,file in {'/':'index.html','/passport':'passport.html','/resume':'resum
     app.get(route)(make(file))
 @app.get('/api/health')
 def health(): return {'ok':True}
+
+@app.get('/api/hackathon/insights')
+def hackathon_insights_api():
+    try:
+        return hackathon_insights()
+    except FileNotFoundError as e:
+        raise HTTPException(404, str(e))
 @app.post('/api/profile')
 def profile(p:Profile):
     c=conn(); cur=c.cursor(); cur.execute('INSERT INTO profiles(name,email,education,experience,career_break,location,work_mode,target_role,skills) VALUES(?,?,?,?,?,?,?,?,?)',(p.name,p.email,p.education,p.experience,p.career_break,p.location,p.work_mode,p.target_role,json.dumps(p.skills))); c.commit(); i=cur.lastrowid; c.close(); return {'id':i,**p.model_dump()}
