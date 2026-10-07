@@ -150,11 +150,6 @@ async function dashboard() {
     try {
         const matches = await api(`/api/matches/${p.id}`);
         const top = matches[0];
-        const hackathon = null;
-        const prettyHackathon = (value) => String(value || '')
-            .replace(/_/g, ' ')
-            .replace(/-/g, ' & ')
-            .replace(/\b\w/g, ch => ch.toUpperCase());
 
         /* Profile completeness is intentionally different from job-fit.
            It measures whether the living Career Passport is complete. */
@@ -360,38 +355,6 @@ async function dashboard() {
                 <a class="btn sm" href="/whatif">Explore what-if paths →</a>
             </div>
         `;
-        api(`/api/hackathon/career-intelligence/${p.id}`).then(hackathon => {
-            const skillSignals = hackathon.skill_success_signal.random_forest_feature_importance.slice(0, 3)
-                .map(x => `${prettyHackathon(x.feature)} · ${Math.round(x.importance * 100)}%`)
-                .join(' • ');
-            const personalitySignals = hackathon.personality_success_signal.random_forest_feature_importance.slice(0, 3)
-                .map(x => `${prettyHackathon(x.feature)} · ${Math.round(x.importance * 100)}%`)
-                .join(' • ');
-
-            host.insertAdjacentHTML('beforeend', `
-                <div class="card" style="margin-top:15px;background:linear-gradient(135deg,#eef8ff,#f4efff)">
-                    <div class="split-head">
-                        <div>
-                            <div class="kicker">Official hackathon intelligence</div>
-                            <h2>Market + success signals</h2>
-                            <p class="muted">Organizer datasets → market alignment + ML benchmark signals.</p>
-                        </div>
-                        <span class="match-badge" style="min-width:76px">${hackathon.market_signal.top_20_market_skill_coverage_pct}%<small>MARKET</small></span>
-                    </div>
-                    <div class="grid3" style="margin-top:15px">
-                        <div class="kpi"><small>Market skills matched</small><strong>${hackathon.market_signal.matched_top_market_skills.length}</strong><span class="muted">of top 20</span></div>
-                        <div class="kpi"><small>Technical model F1</small><strong>${Math.round(hackathon.skill_success_signal.best_model.f1 * 100)}%</strong><span class="muted">${prettyHackathon(hackathon.skill_success_signal.best_model.model)}</span></div>
-                        <div class="kpi"><small>Personality model F1</small><strong>${Math.round(hackathon.personality_success_signal.best_model.f1 * 100)}%</strong><span class="muted">${prettyHackathon(hackathon.personality_success_signal.best_model.model)}</span></div>
-                    </div>
-                    <div class="grid2" style="margin-top:15px">
-                        <div><div class="kicker">Technical skill signal</div><p class="muted">${skillSignals}</p></div>
-                        <div><div class="kicker">Personality signal</div><p class="muted">${personalitySignals}</p></div>
-                    </div>
-                    <div class="context-note" style="margin-top:12px">These are observed-data signals, not guarantees of hiring, salary or career success.</div>
-                </div>
-            `);
-        }).catch(error => console.warn('Hackathon intelligence unavailable:', error));
-
     } catch (error) {
         console.error('Dashboard error:', error);
         host.innerHTML = `<div class="card"><h2>Dashboard error</h2><p class="muted">${error.message}</p><a class="btn sm" href="/passport">Open passport</a></div>`;
