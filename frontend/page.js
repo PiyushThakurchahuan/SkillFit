@@ -150,7 +150,7 @@ async function dashboard() {
     try {
         const matches = await api(`/api/matches/${p.id}`);
         const top = matches[0];
-        const hackathon = await api(`/api/hackathon/career-intelligence/${p.id}`).catch(() => null);
+        const hackathon = null;
         const prettyHackathon = (value) => String(value || '')
             .replace(/_/g, ' ')
             .replace(/-/g, ' & ')
@@ -360,7 +360,7 @@ async function dashboard() {
                 <a class="btn sm" href="/whatif">Explore what-if paths →</a>
             </div>
         `;
-        if (hackathon) {
+        api(`/api/hackathon/career-intelligence/${p.id}`).then(hackathon => {
             const skillSignals = hackathon.skill_success_signal.random_forest_feature_importance.slice(0, 3)
                 .map(x => `${prettyHackathon(x.feature)} · ${Math.round(x.importance * 100)}%`)
                 .join(' • ');
@@ -390,7 +390,7 @@ async function dashboard() {
                     <div class="context-note" style="margin-top:12px">These are observed-data signals, not guarantees of hiring, salary or career success.</div>
                 </div>
             `);
-        }
+        }).catch(error => console.warn('Hackathon intelligence unavailable:', error));
 
     } catch (error) {
         console.error('Dashboard error:', error);
