@@ -3,3 +3,8 @@ uvicorn[standard]
 python-multipart
 pypdf
 python-docx
+
+pandas
+numpy
+scikit-learn
+openpyxl
