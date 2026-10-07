@@ -8,6 +8,7 @@ if (path === '/gap') gapPage();
 if (path === '/assessment') assessmentPage();
 if (path === '/reskill') reskillPage();
 if (path === '/whatif') whatIfPage();
+if (path === '/hackathon') hackathonPage();
 
 /* -------------------------
    Career Passport
@@ -695,5 +696,195 @@ async function whatIfPage() {
     } catch (error) {
         console.error('What-if error:', error);
         host.innerHTML = `<div class="card"><h2>Could not load career paths</h2><p class="muted">${error.message}</p></div>`;
+    }
+}
+
+/* -------------------------
+   Hackathon Intelligence
+------------------------- */
+async function hackathonPage() {
+    const host = document.getElementById('hackathonOut');
+    try {
+        host.innerHTML = `
+            <div class="card hackathon-loading">
+                <div class="kicker">Official hackathon analytics</div>
+                <h2>Loading SkillFit intelligence…</h2>
+                <p class="muted">Reading the organizer datasets and calculating the validated model benchmarks. This can take a few seconds.</p>
+            </div>
+        `;
+
+        const [data, p] = await Promise.all([
+            api('/api/hackathon/insights'),
+            profile()
+        ]);
+
+        const market = data.analytics_jobs;
+        const ds = data.data_science_jobs;
+        const skill = data.skill_success_model;
+        const personality = data.personality_success_model;
+
+        const candidateSkills = new Set((p?.skills || []).map(x => String(x).trim().toLowerCase()));
+        const marketTop = market.top_skills || [];
+        const matchedMarket = marketTop.filter(x => candidateSkills.has(String(x.skill).toLowerCase()));
+        const coverage = marketTop.length
+            ? Math.round(matchedMarket.length / marketTop.length * 100)
+            : 0;
+
+        const modelCard = (title, subtitle, result, label) => {
+            const best = result.best_by_f1;
+            const rows = result.models || [];
+            const importance = result.random_forest_feature_importance || [];
+            return `
+                <div class="card hack-card">
+                    <div class="kicker">${label}</div>
+                    <h2>${title}</h2>
+                    <p class="muted">${subtitle}</p>
+                    <div class="hack-model-best">
+                        <span>Best by F1</span>
+                        <b>${best.model.replace('_', ' ')}</b>
+                        <strong>${(best.f1 * 100).toFixed(1)}%</strong>
+                    </div>
+                    <div class="hack-metrics">
+                        ${rows.map(row => `
+                            <div>
+                                <small>${row.model.replace('_', ' ')}</small>
+                                <b>F1 ${(row.f1 * 100).toFixed(1)}%</b>
+                                <span>ROC-AUC ${(row.roc_auc * 100).toFixed(1)}%</span>
+                            </div>
+                        `).join('')}
+                    </div>
+                    <div class="hack-subhead">Random Forest feature importance</div>
+                    <div class="importance-list">
+                        ${importance.map((x, i) => `
+                            <div class="importance-row">
+                                <div class="importance-label"><span>${i + 1}. ${x.feature.replaceAll('_', ' ')}</span><b>${(x.importance * 100).toFixed(1)}%</b></div>
+                                <div class="importance-bar"><i style="width:${Math.max(4, x.importance * 100)}%"></i></div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+        };
+
+        host.innerHTML = `
+            <div class="hack-hero">
+                <div>
+                    <div class="kicker">Build for Bharat 2.0 • Data Intelligence</div>
+                    <h2>SkillFit × Official Hackathon Data</h2>
+                    <p>Market demand + technical skill signals + personality signals, converted into explainable career intelligence.</p>
+                </div>
+                <div class="hack-hero-badge">DATA<br>BACKED</div>
+            </div>
+
+            <div class="grid4 hack-kpis" style="margin-top:15px">
+                <div class="kpi"><small>Analytics job records</small><strong>${market.rows.toLocaleString()}</strong><span class="muted">Organizer dataset</span></div>
+                <div class="kpi"><small>Data Science records</small><strong>${ds.rows.toLocaleString()}</strong><span class="muted">Organizer dataset</span></div>
+                <div class="kpi"><small>JDS model F1</small><strong>${(skill.best_by_f1.f1 * 100).toFixed(1)}%</strong><span class="muted">5-fold CV benchmark</span></div>
+                <div class="kpi"><small>SDS model F1</small><strong>${(personality.best_by_f1.f1 * 100).toFixed(1)}%</strong><span class="muted">5-fold CV benchmark</span></div>
+            </div>
+
+            <div class="card" style="margin-top:15px">
+                <div class="split-head">
+                    <div>
+                        <div class="kicker">How the datasets connect</div>
+                        <h2>Four datasets → three intelligence lenses</h2>
+                        <p class="muted">The organizer files do not share an individual-level key, so SkillFit does not falsely join them. Each dataset contributes evidence to a separate analytical layer.</p>
+                    </div>
+                </div>
+                <div class="hack-flow">
+                    <div><b>01</b><strong>Job Market</strong><span>Analytics + Data Science postings</span></div>
+                    <div><b>02</b><strong>Skill Success</strong><span>JDS technical skill dimensions</span></div>
+                    <div><b>03</b><strong>Personality Success</strong><span>SDS Big Five dimensions</span></div>
+                    <div><b>04</b><strong>Career Intelligence</strong><span>Combined at recommendation layer</span></div>
+                </div>
+            </div>
+
+            <div class="grid2 hack-grid" style="margin-top:15px">
+                <div class="card hack-card">
+                    <div class="kicker">Job Market Intelligence</div>
+                    <h2>What the market is asking for</h2>
+                    <p class="muted">Top skills appearing in the supplied Analytics Jobs dataset.</p>
+                    <div class="hack-list">
+                        ${marketTop.slice(0, 10).map((x, i) => `
+                            <div class="hack-list-row"><span><b>${i + 1}</b> ${x.skill}</span><strong>${x.count.toLocaleString()}</strong></div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="card hack-card">
+                    <div class="kicker">Candidate → Market Alignment</div>
+                    <h2>${coverage}% top-skill coverage</h2>
+                    <p class="muted">Your current SkillFit skills compared with the top market skills in the organizer dataset.</p>
+                    <div class="tags" style="margin-top:13px">${tags(matchedMarket.map(x => x.skill), 'good')}</div>
+                    <div class="hack-note">${matchedMarket.length ? `Matched ${matchedMarket.length} of the top ${marketTop.length} market skill signals.` : 'No exact overlap with the top market skill labels yet. This is a vocabulary alignment signal, not a hiring probability.'}</div>
+                    <div class="hack-subhead">Top locations</div>
+                    <div class="tags">${(market.top_locations || []).slice(0, 8).map(x => `<span class="tag">${x.location} • ${x.count.toLocaleString()}</span>`).join('')}</div>
+                </div>
+            </div>
+
+            <div class="grid2 hack-grid" style="margin-top:15px">
+                ${modelCard(
+                    'Technical Skill Success',
+                    'Observed salary-hike high/low classification from the JDS Skill Traits dataset.',
+                    skill,
+                    'JDS • Technical skill benchmark'
+                )}
+                ${modelCard(
+                    'Personality Success',
+                    'Observed success high/low classification from the SDS Personality Traits dataset.',
+                    personality,
+                    'SDS • Personality benchmark'
+                )}
+            </div>
+
+            <div class="grid2 hack-grid" style="margin-top:15px">
+                <div class="card hack-card">
+                    <div class="kicker">Data Science Market</div>
+                    <h2>Salary & role signals</h2>
+                    <div class="hack-stats">
+                        <div><span>Median average salary</span><b>${ds.median_avg_salary_lpa} LPA</b></div>
+                        <div><span>Mean average salary</span><b>${ds.mean_avg_salary_lpa} LPA</b></div>
+                        <div><span>Maximum salary</span><b>${ds.max_salary_lpa} LPA</b></div>
+                    </div>
+                    <div class="hack-subhead">Top roles by total jobs</div>
+                    <div class="hack-list">
+                        ${(ds.top_roles_by_total_jobs || []).slice(0, 8).map(x => `
+                            <div class="hack-list-row"><span>${x.job_title}</span><strong>${Number(x.total_jobs || 0).toLocaleString()}</strong></div>
+                        `).join('')}
+                    </div>
+                </div>
+
+                <div class="card hack-card hack-caveat">
+                    <div class="kicker">Responsible interpretation</div>
+                    <h2>What the model does — and does not — say</h2>
+                    <ul>
+                        <li>Feature importance shows predictive contribution within the fitted Random Forest, not causation.</li>
+                        <li>High/low outcomes are observed labels in the supplied datasets, not guaranteed future success.</li>
+                        <li>Personality is not inferred from a resume. A future assessment can provide those dimensions explicitly.</li>
+                        <li>Market coverage is a vocabulary-alignment signal, not a probability of getting hired.</li>
+                        <li>The What-If engine remains a scenario-based fit projection, not a salary forecast.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="card hack-final" style="margin-top:15px">
+                <div>
+                    <div class="kicker">Hackathon story</div>
+                    <h2>From data → evidence → personalized action.</h2>
+                    <p class="muted">SkillFit uses the official datasets as evidence layers, then connects those insights to the candidate's existing profile, skill gaps and explainable opportunity matching.</p>
+                </div>
+                <div class="hack-final-flow">Resume → Skill DNA → Market Demand → Success Signals → Skill Gap → Career Action</div>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Hackathon intelligence error:', error);
+        host.innerHTML = `
+            <div class="card">
+                <div class="kicker">Hackathon Intelligence</div>
+                <h2>Could not load the organizer datasets</h2>
+                <p class="muted">${error.message}</p>
+                <p class="muted">Make sure the four official files are inside <code>backend/hackathon_data</code>.</p>
+            </div>
+        `;
     }
 }
