@@ -1,25 +1,29 @@
-"""Official hackathon data engine for SkillFit.
+"""Official hackathon analytics used by SkillFit.
 
-Expected files inside backend/hackathon_data/:
-- Analytics Jobs.csv
-- DataScience Jobs.csv
-- JDS Skill Traits.xlsx
-- SDS Personality Traits.xlsx
-
-This module keeps the four official datasets as separate analytical lenses.
-They are NOT joined at individual level because their IDs do not represent a
-shared person across all four files.
+The organizer datasets are kept as separate analytical lenses because they do
+not share an individual-level person key:
+- Analytics Jobs / Data Science Jobs -> market intelligence
+- JDS Skill Traits -> technical-skill outcome intelligence
+- SDS Personality Traits -> personality outcome intelligence
 """
 
 from pathlib import Path
 import re
+
 import numpy as np
 import pandas as pd
-from sklearn.model_selection import StratifiedKFold, cross_validate
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import (
+    accuracy_score,
+    f1_score,
+    precision_score,
+    recall_score,
+    roc_auc_score,
+)
+from sklearn.model_selection import StratifiedKFold, cross_val_predict
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import LogisticRegression
-from sklearn.ensemble import RandomForestClassifier
 
 DATA = Path(__file__).resolve().parent / "hackathon_data"
 
@@ -33,64 +37,126 @@ def _path(name: str) -> Path:
     return p
 
 
-def _metrics(model, X, y):
-    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
-    scores = cross_validate(
-        model, X, y, cv=cv,
-        scoring=["accuracy", "precision", "recall", "f1", "roc_auc"]
-    )
+def _clean(x) -> str:
+    if pd.isna(x):
+        return ""
+    return re.sub(r"\s+", " ", str(x).strip().lower())
+
+
+def _nums(x):
+    return [float(v) for v in re.findall(r"\d+(?:\.\d+)?", str(x))]
+
+
+def _lpa(x):
+    n = _nums(x)
+    return n[0] if n else np.nan
+
+
+def _classification_models():
     return {
-        k.replace("test_", ""): round(float(scores[k].mean()), 3)
-        for k in ["test_accuracy", "test_precision", "test_recall", "test_f1", "test_roc_auc"]
+        "logistic_regression": Pipeline(
+            [
+                ("scaler", StandardScaler()),
+                ("model", LogisticRegression(max_iter=2000, random_state=42)),
+            ]
+        ),
+        "random_forest": RandomForestClassifier(
+            n_estimators=400,
+            max_depth=5,
+            min_samples_leaf=3,
+            class_weight="balanced",
+            random_state=42,
+        ),
     }
 
 
-def _clean_skill(x):
-    x = str(x).strip().lower()
-    x = re.sub(r"\s+", " ", x)
-    return x
+def _model_results(df, features, target):
+    work = df[features + [target]].copy()
+    for col in features:
+        work[col] = pd.to_numeric(work[col], errors="coerce")
+    work[target] = pd.to_numeric(work[target], errors="coerce")
+    work = work.dropna()
+
+    X = work[features]
+    y = work[target].astype(int)
+    cv = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+
+    results = []
+    importance = {}
+    for name, model in _classification_models().items():
+        pred = cross_val_predict(model, X, y, cv=cv, method="predict")
+        prob = cross_val_predict(model, X, y, cv=cv, method="predict_proba")[:, 1]
+        results.append(
+            {
+                "model": name,
+                "accuracy": round(float(accuracy_score(y, pred)), 4),
+                "precision": round(float(precision_score(y, pred, zero_division=0)), 4),
+                "recall": round(float(recall_score(y, pred, zero_division=0)), 4),
+                "f1": round(float(f1_score(y, pred, zero_division=0)), 4),
+                "roc_auc": round(float(roc_auc_score(y, prob)), 4),
+            }
+        )
+
+        model.fit(X, y)
+        if name == "random_forest":
+            importance = {
+                f: round(float(v), 6)
+                for f, v in sorted(
+                    zip(features, model.feature_importances_),
+                    key=lambda z: z[1],
+                    reverse=True,
+                )
+            }
+
+    best = max(results, key=lambda r: (r["f1"], r["roc_auc"]))
+    return {
+        "rows": int(len(work)),
+        "class_balance": {
+            str(k): int(v) for k, v in y.value_counts().sort_index().items()
+        },
+        "models": results,
+        "best_by_f1": best,
+        "random_forest_feature_importance": [
+            {"feature": k, "importance": v} for k, v in importance.items()
+        ],
+    }
 
 
 def analytics_summary(limit=20):
     df = pd.read_csv(_path("Analytics Jobs.csv"))
     skills = (
-        df["key_skills"].fillna("")
+        df["key_skills"]
+        .fillna("")
         .astype(str)
         .str.split(",")
         .explode()
-        .map(_clean_skill)
+        .map(_clean)
     )
     skills = skills[(skills != "") & (skills != "...")]
-    top_skills = [
-        {"skill": k, "count": int(v)}
-        for k, v in skills.value_counts().head(limit).items()
-    ]
-    top_roles = [
-        {"role": k, "count": int(v)}
-        for k, v in df["job_desig"].value_counts().head(limit).items()
-    ]
-    top_locations = [
-        {"location": k, "count": int(v)}
-        for k, v in df["location"].value_counts().head(limit).items()
-    ]
-    salary = df["salary"].value_counts().to_dict()
     return {
         "rows": int(len(df)),
+        "top_skills": [
+            {"skill": k, "count": int(v)}
+            for k, v in skills.value_counts().head(limit).items()
+        ],
+        "top_roles": [
+            {"role": k, "count": int(v)}
+            for k, v in df["job_desig"].fillna("").map(_clean).value_counts().head(limit).items()
+        ],
+        "top_locations": [
+            {"location": k, "count": int(v)}
+            for k, v in df["location"].fillna("").map(_clean).value_counts().head(limit).items()
+        ],
         "missing_job_description": int(df["job_description"].isna().sum()),
         "missing_job_type": int(df["job_type"].isna().sum()),
-        "salary_bands": {str(k): int(v) for k, v in salary.items()},
-        "top_skills": top_skills,
-        "top_roles": top_roles,
-        "top_locations": top_locations,
     }
 
 
 def data_science_summary(limit=20):
     df = pd.read_csv(_path("DataScience Jobs.csv"))
     for c in ["avg_salary", "min_salary", "max_salary"]:
-        df[c + "_num"] = (
-            df[c].astype(str).str.replace("L", "", regex=False).astype(float)
-        )
+        df[c + "_num"] = df[c].map(_lpa)
+
     role = (
         df.groupby("job_title", as_index=False)
         .agg(
@@ -105,15 +171,14 @@ def data_science_summary(limit=20):
         "rows": int(len(df)),
         "median_avg_salary_lpa": round(float(df["avg_salary_num"].median()), 2),
         "mean_avg_salary_lpa": round(float(df["avg_salary_num"].mean()), 2),
-        "top_roles_by_total_jobs": role.round(2).to_dict("records"),
         "max_salary_lpa": round(float(df["max_salary_num"].max()), 2),
+        "top_roles_by_total_jobs": role.round(2).to_dict("records"),
     }
 
 
 def skill_model():
     df = pd.read_excel(_path("JDS Skill Traits.xlsx"))
     df.columns = df.columns.str.strip()
-    target = "salary_hike_high_or_low"
     features = [
         "big_data_skills",
         "maths-stats_skills",
@@ -121,34 +186,12 @@ def skill_model():
         "ai_and_ml_skills",
         "dashboard_and_storytelling_skills",
     ]
-    X, y = df[features], df[target].astype(int)
-
-    model = RandomForestClassifier(
-        n_estimators=300, max_depth=4, min_samples_leaf=3, random_state=42
-    )
-    return {
-        "rows": int(len(df)),
-        "class_balance": {str(k): int(v) for k, v in y.value_counts().sort_index().items()},
-        "model": "Random Forest",
-        "metrics_5fold": _metrics(model, X, y),
-        "feature_importance": [
-            {"feature": f, "importance": round(float(v), 4)}
-            for f, v in sorted(
-                zip(features, model.fit(X, y).feature_importances_),
-                key=lambda z: z[1], reverse=True
-            )
-        ],
-        "correlation_with_target": {
-            f: round(float(df[[f, target]].corr().iloc[0, 1]), 3)
-            for f in features
-        },
-    }
+    return _model_results(df, features, "salary_hike_high_or_low")
 
 
 def personality_model():
     df = pd.read_excel(_path("SDS Personality Traits.xlsx"))
     df.columns = df.columns.str.strip()
-    target = "success_ classification_ high_low"
     features = [
         "neuroticism",
         "extraversion",
@@ -156,36 +199,67 @@ def personality_model():
         "agreeableness",
         "conscientiousness",
     ]
-    X, y = df[features], df[target].astype(int)
-
-    model = RandomForestClassifier(
-        n_estimators=300, max_depth=4, min_samples_leaf=3, random_state=42
-    )
-    return {
-        "rows": int(len(df)),
-        "class_balance": {str(k): int(v) for k, v in y.value_counts().sort_index().items()},
-        "model": "Random Forest",
-        "metrics_5fold": _metrics(model, X, y),
-        "feature_importance": [
-            {"feature": f, "importance": round(float(v), 4)}
-            for f, v in sorted(
-                zip(features, model.fit(X, y).feature_importances_),
-                key=lambda z: z[1], reverse=True
-            )
-        ],
-        "correlation_with_target": {
-            f: round(float(df[[f, target]].corr().iloc[0, 1]), 3)
-            for f in features
-        },
-    }
+    return _model_results(df, features, "success_ classification_ high_low")
 
 
 def insights():
     return {
         "source": "Official Build for Bharat / SAS hackathon datasets supplied by the organizers",
-        "warning": "The four datasets are analyzed as separate modules; they are not joined at individual level.",
+        "warning": (
+            "The four datasets are analyzed as separate modules; they are not "
+            "joined at individual level."
+        ),
         "analytics_jobs": analytics_summary(),
         "data_science_jobs": data_science_summary(),
         "skill_success_model": skill_model(),
         "personality_success_model": personality_model(),
+    }
+
+
+def career_intelligence(profile):
+    """Return hackathon-backed intelligence for a live SkillFit profile.
+
+    This is recommendation support, not a causal prediction of salary or
+    career success. Candidate skills are compared with market skill vocabulary;
+    JDS/SDS models are presented as benchmark signals.
+    """
+    market = analytics_summary(limit=20)
+    skill_result = skill_model()
+    personality_result = personality_model()
+
+    candidate = {_clean(x) for x in (profile.get("skills") or []) if _clean(x)}
+    market_skills = [x["skill"] for x in market["top_skills"]]
+    matched_market = [s for s in market_skills if s in candidate]
+    coverage = round((len(matched_market) / len(market_skills)) * 100, 1) if market_skills else 0
+
+    return {
+        "profile_id": profile.get("id"),
+        "candidate_skills": sorted(candidate),
+        "market_signal": {
+            "top_market_skills": market["top_skills"][:10],
+            "matched_top_market_skills": matched_market,
+            "top_20_market_skill_coverage_pct": coverage,
+            "message": (
+                "Coverage is a market-alignment signal against the supplied "
+                "job-posting vocabulary, not a hiring probability."
+            ),
+        },
+        "skill_success_signal": {
+            "rows": skill_result["rows"],
+            "best_model": skill_result["best_by_f1"],
+            "top_dimensions": skill_result["random_forest_feature_importance"],
+            "message": (
+                "Technical dimensions are ranked by Random Forest feature "
+                "importance for the observed salary-hike class."
+            ),
+        },
+        "personality_success_signal": {
+            "rows": personality_result["rows"],
+            "best_model": personality_result["best_by_f1"],
+            "top_traits": personality_result["random_forest_feature_importance"],
+            "message": (
+                "Personality dimensions are ranked by Random Forest feature "
+                "importance for the observed success class."
+            ),
+        },
     }
