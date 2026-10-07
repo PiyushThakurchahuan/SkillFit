@@ -134,14 +134,8 @@ async function analyze() {
    Dashboard
 ------------------------- */
 async function dashboard() {
-    const host = document.getElementById('dash') || document.getElementById('body');
-    if (!host) return;
-    let p;
-    try { p = await profile(); } catch (error) {
-        console.error('Dashboard profile load error:', error);
-        host.innerHTML = `<div class="card"><h2>Could not load profile</h2><p class="muted">${error.message}</p></div>`;
-        return;
-    }
+    const host = document.getElementById('dash');
+    const p = await profile();
 
     if (!p) {
         host.innerHTML = `
