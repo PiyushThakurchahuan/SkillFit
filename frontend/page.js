@@ -361,10 +361,10 @@ async function dashboard() {
             </div>
         `;
         if (hackathon) {
-            const skillSignals = hackathon.skill_success_signal.top_dimensions.slice(0, 3)
+            const skillSignals = hackathon.skill_success_signal.random_forest_feature_importance.slice(0, 3)
                 .map(x => `${prettyHackathon(x.feature)} · ${Math.round(x.importance * 100)}%`)
                 .join(' • ');
-            const personalitySignals = hackathon.personality_success_signal.top_traits.slice(0, 3)
+            const personalitySignals = hackathon.personality_success_signal.random_forest_feature_importance.slice(0, 3)
                 .map(x => `${prettyHackathon(x.feature)} · ${Math.round(x.importance * 100)}%`)
                 .join(' • ');
 
