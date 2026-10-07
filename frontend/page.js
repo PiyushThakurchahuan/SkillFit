@@ -150,6 +150,11 @@ async function dashboard() {
     try {
         const matches = await api(`/api/matches/${p.id}`);
         const top = matches[0];
+        const hackathon = await api(`/api/hackathon/career-intelligence/${p.id}`).catch(() => null);
+        const prettyHackathon = (value) => String(value || '')
+            .replace(/_/g, ' ')
+            .replace(/-/g, ' & ')
+            .replace(/\b\w/g, ch => ch.toUpperCase());
 
         /* Profile completeness is intentionally different from job-fit.
            It measures whether the living Career Passport is complete. */
@@ -346,6 +351,59 @@ async function dashboard() {
                 <div class="jobgrid" style="margin-top:14px">${matches.slice(0, 4).map(jobCard).join('')}</div>
             </div>
 
+            \${hackathon ? \`
+            <div class="card" style="margin-top:15px;background:linear-gradient(135deg,#eef8ff,#f4efff)">
+                <div class="split-head">
+                    <div>
+                        <div class="kicker">Official hackathon intelligence</div>
+                        <h2>Market + success signals</h2>
+                        <p class="muted">Built from the organizer datasets. These are evidence-backed benchmark signals, not guarantees of hiring, salary or success.</p>
+                    </div>
+                    <span class="match-badge" style="min-width:76px">\${hackathon.market_signal.top_20_market_skill_coverage_pct}%<small>MARKET</small></span>
+                </div>
+
+                <div class="grid3" style="margin-top:15px">
+                    <div class="kpi">
+                        <small>Top market skills matched</small>
+                        <strong>\${hackathon.market_signal.matched_top_market_skills.length}</strong>
+                        <span class="muted">of top 20 signals</span>
+                    </div>
+                    <div class="kpi">
+                        <small>Skill model</small>
+                        <strong>\${Math.round(hackathon.skill_success_signal.best_model.f1 * 100)}%</strong>
+                        <span class="muted">F1 • \${prettyHackathon(hackathon.skill_success_signal.best_model.model)}</span>
+                    </div>
+                    <div class="kpi">
+                        <small>Personality model</small>
+                        <strong>\${Math.round(hackathon.personality_success_signal.best_model.f1 * 100)}%</strong>
+                        <span class="muted">F1 • \${prettyHackathon(hackathon.personality_success_signal.best_model.model)}</span>
+                    </div>
+                </div>
+
+                <div class="grid2" style="margin-top:15px">
+                    <div>
+                        <div class="kicker">Technical skill signal</div>
+                        <h3>Most informative dimensions</h3>
+                        <div class="tags" style="margin-top:10px">
+                            \${hackathon.skill_success_signal.top_dimensions.slice(0,3).map((x,i) =>
+                                \`<span class="tag good">\${i+1}. \${prettyHackathon(x.feature)} · \${Math.round(x.importance*100)}%</span>\`
+                            ).join('')}
+                        </div>
+                    </div>
+                    <div>
+                        <div class="kicker">Personality signal</div>
+                        <h3>Most informative traits</h3                        <div class="tags" style="margin-top:10px">
+                            \${hackathon.personality_success_signal.top_traits.slice(0,3).map((x,i) =>
+                                \`<span class="tag good">\${i+1}. \${prettyHackathon(x.feature)} · \${Math.round(x.importance*100)}%</span>\`
+                            ).join('')}
+                        </div>
+                    </div>
+                </div>
+
+                <div class="context-note" style="margin-top:14px">
+                    ✓ SkillFit now combines your live profile with the official hackathon market vocabulary and validated ML benchmark signals.
+                </div>
+            </div>\` : ''}
             <div class="card whatif-preview" style="margin-top:15px">
                 <div>
                     <div class="kicker">What-if career paths</div>
